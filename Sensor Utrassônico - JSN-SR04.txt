@@ -1,0 +1,41 @@
+// Pinos do sensor JSN-SR04
+const int trigPin = 9;
+const int echoPin = 10;
+
+// Variáveis de altura
+const float alturaSensor = 220.0; // altura do sensor em cm
+const float alturaMinima = 40.0;  // altura mínima para mostrar (descartar objetos pequenos)
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+}
+
+void loop() {
+  // Gera pulso de 10 microssegundos no TRIG
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Lê o tempo do ECHO
+  long duracao = pulseIn(echoPin, HIGH);
+
+  // Calcula a distância do sensor até a cabeça da pessoa (em cm)
+  float distanciaDetectada = (duracao * 0.0343) / 2;
+
+  // Calcula a altura da pessoa
+  float alturaPessoa = alturaSensor - distanciaDetectada;
+
+  // Mostra no Serial Monitor se a altura for maior que 40 cm
+  if (alturaPessoa > alturaMinima) {
+    Serial.print("Altura detectada: ");
+    Serial.print(alturaPessoa);
+    Serial.println(" cm");
+  }
+
+  delay(200); // espera 200ms antes da próxima leitura
+}
+
