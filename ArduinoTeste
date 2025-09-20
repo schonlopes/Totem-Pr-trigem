@@ -1,0 +1,164 @@
+#include <Wire.h>
+#include "Adafruit_MLX90614.h"
+
+// SparkFun MAX3010x (MAX30102 compatível)
+#include "MAX30105.h"
+#include "heartRate.h"
+#include "spo2_algorithm.h"
+
+// ==== Pinos / Sensores ====
+#define TRIG_PIN 9
+#define ECHO_PIN 10
+const int GSR_PIN = A0;
+
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+MAX30105 particleSensor;
+bool max30102_ok = false;   // setado no setup()
+
+// ==== Controle ====
+String comando;
+
+// ==== Config MAX30102 ====
+const byte ledBrightness = 60;      // 0–255 (pode baixar p/ 40 se quiser)
+const byte sampleAverage = 4;       // 1,2,4,8,16,32 (pode baixar p/ 2 se RAM/ruído)
+const byte ledMode       = 2;       // 2 = RED+IR
+const int  sampleRate    = 100;     // 50..1000
+const int  pulseWidth    = 411;     // 69,118,215,411 (us)
+const int  adcRange      = 4096;    // 2048,4096,8192,16384
+
+static inline void flushSerialInput() { while (Serial.available()) (void)Serial.read(); }
+
+// Fwds
+void medirAltura();
+void medirTemperatura();
+void medirSinaisVitais(); // 1 janela, ~2–3s
+void medirGSR();
+
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  Wire.begin();
+  Wire.setClock(400000);
+
+  if (!mlx.begin()) {
+    Serial.println(F("ERR:MLX90614"));
+  }
+
+  max30102_ok = particleSensor.begin(Wire, I2C_SPEED_STANDARD);
+  if (!max30102_ok) {
+    Serial.println(F("ERR:MAX30102"));
+  } else {
+    particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
+    particleSensor.enableAFULL();
+  }
+
+  pinMode(GSR_PIN, INPUT);
+  Serial.println(F("READY"));
+}
+
+void loop() {
+  if (Serial.available()) {
+    comando = Serial.readStringUntil('\n');
+    comando.trim();
+    comando.toUpperCase();
+
+    if      (comando == F("ALTURA"))  medirAltura();
+    else if (comando == F("TEMP"))    medirTemperatura();
+    else if (comando == F("HR_SPO2")) medirSinaisVitais();
+    else if (comando == F("GSR"))     medirGSR();
+
+    flushSerialInput();
+  }
+}
+
+void medirAltura() {
+  digitalWrite(TRIG_PIN, LOW);  delayMicroseconds(3);
+  digitalWrite(TRIG_PIN, HIGH); delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  unsigned long duracao = pulseIn(ECHO_PIN, HIGH, 30000UL); // timeout 30ms
+  if (duracao == 0) { Serial.println(F("ALTURA:NA")); return; }
+
+  float distancia_cm = (duracao * 0.034f) / 2.0f;
+  if (distancia_cm >= 40.0f && distancia_cm <= 250.0f) {
+    Serial.print(F("ALTURA:")); Serial.println(distancia_cm, 1);
+  } else {
+    Serial.println(F("ALTURA:OUT"));
+  }
+}
+
+void medirTemperatura() {
+  float t = mlx.readObjectTempC();
+  if (isnan(t)) { Serial.println(F("TEMP:NA")); return; }
+  if (t >= 30.0f && t <= 43.0f) {
+    Serial.print(F("TEMP:")); Serial.println(t, 2);
+  } else {
+    Serial.println(F("TEMP:OUT"));
+  }
+}
+
+void medirSinaisVitais() {
+  if (!max30102_ok) {
+    Serial.println(F("HR:NA"));
+    Serial.println(F("SPO2:NA"));
+    return;
+  }
+
+  // Garante configuração
+  particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
+
+  Serial.println(F("INFO:POSICIONE_DEDO"));
+  unsigned long tStart = millis();
+  while (millis() - tStart < 1200) { particleSensor.check(); delay(5); }
+
+  // ===== Janela única (100 amostras) =====
+  const int BUF_LEN = 100;              // combina com o algoritmo da Maxim
+  uint16_t irBuffer[BUF_LEN];
+  uint16_t redBuffer[BUF_LEN];
+
+  int i = 0;
+  while (i < BUF_LEN) {
+    particleSensor.check();
+    while (particleSensor.available() && i < BUF_LEN) {
+      uint32_t ir  = particleSensor.getIR();
+      uint32_t red = particleSensor.getRed();
+
+      if (ir < 50000) { // sem dedo/contato ruim
+        particleSensor.nextSample();
+        delay(8);
+        continue;
+      }
+
+      irBuffer[i]  = (ir  > 65535U) ? 65535U : (uint16_t)ir;
+      redBuffer[i] = (red > 65535U) ? 65535U : (uint16_t)red;
+      i++;
+      particleSensor.nextSample();
+    }
+  }
+
+  int32_t spo2, heartRate;
+  int8_t  validSPO2, validHeartRate;
+
+  maxim_heart_rate_and_oxygen_saturation(
+    irBuffer, BUF_LEN, redBuffer,
+    &spo2, &validSPO2, &heartRate, &validHeartRate
+  );
+
+  bool hr_ok   = (validHeartRate && heartRate > 30 && heartRate < 220);
+  bool spo2_ok = (validSPO2 && spo2 >= 70 && spo2 <= 100);
+
+  if (hr_ok)   { Serial.print(F("HR:"));   Serial.println(heartRate, 0); } else Serial.println(F("HR:NA"));
+  if (spo2_ok) { Serial.print(F("SPO2:")); Serial.println(spo2, 0); }     else Serial.println(F("SPO2:NA"));
+}
+
+void medirGSR() {
+  const int N = 10;
+  long acc = 0;
+  for (int i = 0; i < N; i++) { acc += analogRead(GSR_PIN); delay(5); }
+  int g = (int)(acc / N);
+  Serial.print(F("GSR:")); Serial.println(g);
+}

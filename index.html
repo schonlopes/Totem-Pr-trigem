@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistema de Triagem de Saúde</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Sistema de Triagem de Saúde</h1>
+
+    <!-- Conexão com Arduino (Web Serial) -->
+    <div style="display:flex; gap:12px; align-items:center; margin: 8px 0 16px;">
+      <button class="button" id="btnConnect">Conectar Arduino</button>
+      <span id="portStatus" style="opacity:0.85;">Não conectado</span>
+    </div>
+
+    <!-- Barra de progresso -->
+    <div class="progress-bar">
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <!-- TELAS -->
+    <!-- 1) Boas-vindas -->
+    <section id="screen1" class="screen active">
+      <h2>Boas-vindas</h2>
+      <p>Bem-vindo(a) ao sistema de triagem de saúde. Clique para iniciar.</p>
+      <div class="sensor"><i class="fas fa-heartbeat"></i></div>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(2)">Iniciar Triagem</button>
+      </div>
+    </section>
+
+    <!-- 2) Identificação -->
+    <section id="screen2" class="screen">
+      <h2>Identificação</h2>
+      <p>Informe seus dados iniciais (ex.: número na chamada, turma, etc.).</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(3)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 3) Orientações (pode ser automática no seu fluxo) -->
+    <section id="screen3" class="screen">
+      <h2>Orientações</h2>
+      <p>Siga as orientações apresentadas na tela antes de iniciar as medições.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(4)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 4) Preparação -->
+    <section id="screen4" class="screen">
+      <h2>Preparação</h2>
+      <p>Prepare-se para as medições. Retire acessórios se necessário.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(5)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 5) Peso (PESO) -->
+    <section id="screen5" class="screen">
+      <h2>Peso</h2>
+      <p>Suba na balança. O valor será capturado automaticamente.</p>
+      <div class="result"><span id="pesoValue">Aguardando…</span></div>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(6)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 6) Altura (ALTURA) -->
+    <section id="screen6" class="screen">
+      <h2>Altura</h2>
+      <p>Permaneça ereto e imóvel. O valor será capturado automaticamente.</p>
+      <div class="result"><span id="alturaValue">Aguardando…</span></div>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(7)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 7) Preparação sinais vitais -->
+    <section id="screen7" class="screen">
+      <h2>Preparação dos Sinais Vitais</h2>
+      <p>Limpe o dedo se necessário e mantenha-se em repouso.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(8)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 8) Frequência Cardíaca (HR) -->
+    <section id="screen8" class="screen">
+      <h2>Frequência Cardíaca</h2>
+      <p>Posicione o dedo no sensor de pulso até a leitura estabilizar.</p>
+      <div class="result"><span id="hrValue">Aguardando…</span></div>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(9)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 9) Saturação de O2 (SPO2) -->
+    <section id="screen9" class="screen">
+      <h2>Saturação de O₂</h2>
+      <p>Mantenha o dedo no sensor até a leitura estabilizar.</p>
+      <div class="result"><span id="spo2Value">Aguardando…</span></div>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(10)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 10) Temperatura (TEMP) -->
+    <section id="screen10" class="screen">
+      <h2>Temperatura</h2>
+      <p>Encoste o sensor conforme orientação e aguarde.</p>
+      <div class="result"><span id="tempValue">Aguardando…</span></div>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(11)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 11) Orientação emocional -->
+    <section id="screen11" class="screen">
+      <h2>Autoavaliação</h2>
+      <p>Responda rapidamente como você está se sentindo hoje.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(12)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 12) Questionários breves -->
+    <section id="screen12" class="screen">
+      <h2>Questionário Breve</h2>
+      <p>Responda às questões objetivas exibidas na tela.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(13)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 13) GSR (GSR) -->
+    <section id="screen13" class="screen">
+      <h2>GSR</h2>
+      <p>Segure os eletrodos de GSR de forma firme para a leitura.</p>
+      <div class="result"><span id="gsrValue">Aguardando…</span></div>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(14)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 14) Revisão parcial -->
+    <section id="screen14" class="screen">
+      <h2>Revisão Parcial</h2>
+      <p>Verifique se tudo foi preenchido corretamente antes de concluir.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(15)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 15) Consentimento / instruções finais -->
+    <section id="screen15" class="screen">
+      <h2>Consentimento</h2>
+      <p>Confirme a autorização para uso dos dados de triagem conforme política da escola.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(16)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 16) Sumário da triagem -->
+    <section id="screen16" class="screen">
+      <h2>Resumo</h2>
+      <p>Aqui será mostrado um resumo com os principais resultados.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(17)">Avançar</button>
+      </div>
+    </section>
+
+    <!-- 17) Conclusão -->
+    <section id="screen17" class="screen">
+      <h2>Concluído</h2>
+      <p>Obrigado por realizar a triagem. Procure a orientação da equipe se necessário.</p>
+      <div class="actions">
+        <button class="button" onclick="nextScreen(1)">Reiniciar</button>
+      </div>
+    </section>
+
+    <div class="footer">Sistema de Triagem de Saúde © 2025</div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
